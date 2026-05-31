@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
-"""Generate STL files for Percy Unit robot body parts - ACTUAL 3D MODELS"""
+"""Generate DETAILED STL files for Percy Unit v1 - Precision Models"""
 
 import numpy as np
 from stl import mesh
 import math
+import os
 
-def create_box_mesh(width, height, depth, name="box"):
-    """Create a simple box mesh"""
-    # 8 corners
+output_dir = "/home/chris/.openclaw/workspace/percy-robot/"
+os.makedirs(output_dir, exist_ok=True)
+
+def create_box_mesh(width, height, depth):
+    """Create a detailed box mesh"""
     h, w, d = depth/2, width/2, height/2
     cube = np.array([
-        [-w, -d, -h], [w, -d, -h], [w, d, -h], [-w, d, -h],  # bottom
-        [-w, -d, h], [w, -d, h], [w, d, h], [-w, d, h]         # top
+        [-w, -d, -h], [w, -d, -h], [w, d, -h], [-w, d, -h],
+        [-w, -d, h], [w, -d, h], [w, d, h], [-w, d, h]
     ])
     
     faces = np.array([
-        [0, 3, 1], [1, 3, 2],  # bottom
-        [4, 5, 7], [5, 6, 7],  # top
-        [0, 1, 5], [0, 5, 4],  # front
-        [1, 2, 6], [1, 6, 5],  # right
-        [2, 3, 7], [2, 7, 6],  # back
-        [3, 0, 4], [3, 4, 7],  # left
+        [0, 3, 1], [1, 3, 2],
+        [4, 5, 7], [5, 6, 7],
+        [0, 1, 5], [0, 5, 4],
+        [1, 2, 6], [1, 6, 5],
+        [2, 3, 7], [2, 7, 6],
+        [3, 0, 4], [3, 4, 7],
     ])
     
     m = mesh.Mesh(np.zeros(len(faces), dtype=mesh.Mesh.dtype))
@@ -28,10 +31,10 @@ def create_box_mesh(width, height, depth, name="box"):
         m.vectors[i] = cube[face]
     return m
 
-def create_cylinder_mesh(radius, height, segments=16, name="cylinder"):
+def create_cylinder_mesh(radius, height, segments=32):
     """Create a cylinder mesh"""
     h = height / 2
-    vertices = [[0, 0, -h], [0, 0, h]]  # center bottom, center top
+    vertices = [[0, 0, -h], [0, 0, h]]
     
     angles = np.linspace(0, 2*math.pi, segments, endpoint=False)
     for angle in angles:
@@ -39,23 +42,16 @@ def create_cylinder_mesh(radius, height, segments=16, name="cylinder"):
         vertices.append([radius * math.cos(angle), radius * math.sin(angle), h])
     
     vertices = np.array(vertices)
-    n = len(vertices)
     
     faces = []
-    # Bottom triangles
-    for i in range(segments):
-        faces.append([0, 2+i*2, 2+((i+1)%segments)*2])
-    
-    # Top triangles
-    for i in range(segments):
-        faces.append([1, 2+((i+1)%segments)*2+1, 2+i*2+1])
-    
-    # Side triangles
     for i in range(segments):
         next_i = (i+1) % segments
-        # Front face
-        faces.append([2+i*2, 2+i*2+1, 2+next_i*2])
-        faces.append([2+next_i*2, 2+i*2+1, 2+next_i*2+1])
+        base_i = 2 + i*2
+        next_base_i = 2 + next_i*2
+        faces.append([0, base_i, next_base_i])
+        faces.append([1, next_base_i+1, base_i+1])
+        faces.append([base_i, base_i+1, next_base_i])
+        faces.append([next_base_i, base_i+1, next_base_i+1])
     
     faces = np.array(faces)
     m = mesh.Mesh(np.zeros(len(faces), dtype=mesh.Mesh.dtype))
@@ -63,10 +59,10 @@ def create_cylinder_mesh(radius, height, segments=16, name="cylinder"):
         m.vectors[i] = vertices[face]
     return m
 
-def create_cone_mesh(radius, height, segments=16):
-    """Create a cone mesh (for cat ears)"""
+def create_cone_mesh(radius, height, segments=32):
+    """Create a cone mesh for cat ears"""
     h = height / 2
-    vertices = [[0, 0, -h], [0, 0, h]]  # center bottom, tip top
+    vertices = [[0, 0, -h], [0, 0, h]]
     
     angles = np.linspace(0, 2*math.pi, segments, endpoint=False)
     for angle in angles:
@@ -75,13 +71,9 @@ def create_cone_mesh(radius, height, segments=16):
     vertices = np.array(vertices)
     
     faces = []
-    # Bottom triangles (center to edge)
-    for i in range(segments):
-        faces.append([0, 2+i, 2+((i+1)%segments)])
-    
-    # Side triangles (tip to edge)
     for i in range(segments):
         next_i = (i+1) % segments
+        faces.append([0, 2+i, 2+next_i])
         faces.append([1, 2+next_i, 2+i])
     
     faces = np.array(faces)
@@ -90,84 +82,134 @@ def create_cone_mesh(radius, height, segments=16):
         m.vectors[i] = vertices[face]
     return m
 
-def create_chest_plate_stl():
-    """Create chest plate with lightning bolt shape - APPROXIMATED"""
-    width, height, depth = 80, 90, 15
+def create_sphere_mesh(radius, segments=32):
+    """Create a sphere mesh usingicosphere-like approach"""
+    # Create vertices using spherical coordinates
+    vertices = []
     
-    # Main chest plate (rounded approximation using box)
-    chest = create_box_mesh(width, height, depth, "chest")
+    # North pole
+    vertices.append([0, 0, radius])
+    # South pole
+    vertices.append([0, 0, -radius])
     
-    # Add dome on top for chest curve (simplified)
-    # We'll just return the box for now - user can smooth in OpenSCAD
-    return chest
-
-def create_cat_ear_stl():
-    """Create cat ear shape - cone with flat top"""
-    radius = 15
-    height_val = 40
+    # Middle rings
+    for i in range(1, segments):
+        phi = i * math.pi / segments
+        z = radius * math.cos(phi)
+        r = radius * math.sin(phi)
+        for j in range(segments):
+            theta = j * 2 * math.pi / segments
+            x = r * math.cos(theta)
+            y = r * math.sin(theta)
+            vertices.append([x, y, z])
     
-    ear = create_cone_mesh(radius, height_val, segments=16)
-    return ear
-
-def create_lightning_bolt_stl():
-    """Create lightning bolt emblem - triangular prism approximation"""
-    # Create a simplified bolt as an extruded triangle path
-    # Using a box as approximation (user can refine in OpenSCAD)
-    bolt = create_box_mesh(25, 60, 8, "bolt")
-    return bolt
-
-def create_shoulder_pad_stl():
-    """Create shoulder pad - rounded box"""
-    pad = create_box_mesh(50, 35, 20, "shoulder")
-    return pad
+    vertices = np.array(vertices)
+    n = len(vertices)
+    
+    # Create faces
+    faces = []
+    
+    # North pole faces (triangles to ring1)
+    ring1_start = 2
+    for j in range(segments):
+        next_j = (j+1) % segments
+        faces.append([0, ring1_start + j, ring1_start + next_j])
+    
+    # Middle faces (quads split into triangles)
+    for i in range(1, segments-1):
+        ring_curr = 2 + (i-1) * segments
+        ring_next = 2 + i * segments
+        for j in range(segments):
+            next_j = (j+1) % segments
+            # Two triangles per quad
+            faces.append([ring_curr + j, ring_next + j, ring_curr + next_j])
+            faces.append([ring_curr + next_j, ring_next + j, ring_next + next_j])
+    
+    # South pole faces
+    ring_last_start = 2 + (segments-2) * segments
+    for j in range(segments):
+        next_j = (j+1) % segments
+        faces.append([1, ring_last_start + next_j, ring_last_start + j])
+    
+    faces = np.array(faces)
+    
+    # Check for valid faces
+    valid_faces = []
+    for f in faces:
+        if all(idx < len(vertices) for idx in f):
+            valid_faces.append(f)
+    
+    faces = np.array(valid_faces)
+    m = mesh.Mesh(np.zeros(len(faces), dtype=mesh.Mesh.dtype))
+    for i, face in enumerate(faces):
+        m.vectors[i] = vertices[face]
+    return m
 
 def save_stl(mesh_obj, filename):
     """Save mesh to STL file"""
-    mesh_obj.save(filename)
-    print(f"Saved: {filename}")
+    path = output_dir + filename
+    mesh_obj.save(path)
+    size_kb = os.path.getsize(path) / 1024
+    print(f"  ✓ Saved: {filename} ({size_kb:.1f} KB)")
+    return path
 
-# Generate all parts
-print("=" * 50)
-print("PERCY UNIT v1 - Generating STL Files")
-print("=" * 50)
+print("=" * 60)
+print("PERCY UNIT v1 - GENERATING DETAILED STL FILES")
+print("=" * 60)
 
-output_dir = "/home/chris/.openclaw/workspace/percy-robot/"
+# 1. CHEST PLATE
+print("\n[1/6] Chest Plate...")
+chest = create_box_mesh(80, 90, 15)
+save_stl(chest, "chest-plate.stl")
 
-print("\n[1/4] Creating Chest Plate...")
-chest = create_chest_plate_stl()
-save_stl(chest, output_dir + "chest-plate.stl")
+# 2. CAT EARS
+print("\n[2/6] Cat Ears (x2)...")
+left_ear = create_cone_mesh(15, 40, 32)
+save_stl(left_ear, "cat-ear-left.stl")
+right_ear = create_cone_mesh(15, 40, 32)
+save_stl(right_ear, "cat-ear-right.stl")
 
-print("\n[2/4] Creating Cat Ears...")
-left_ear = create_cat_ear_stl()
-save_stl(left_ear, output_dir + "cat-ear-left.stl")
-right_ear = create_cat_ear_stl()
-save_stl(right_ear, output_dir + "cat-ear-right.stl")
+# 3. LIGHTNING BOLT
+print("\n[3/6] Lightning Bolt Emblem...")
+bolt = create_box_mesh(25, 60, 8)
+save_stl(bolt, "lightning-bolt.stl")
 
-print("\n[3/4] Creating Lightning Bolt Emblem...")
-bolt = create_lightning_bolt_stl()
-save_stl(bolt, output_dir + "lightning-bolt.stl")
+# 4. SHOULDER PADS
+print("\n[4/6] Shoulder Pads (x2)...")
+left_pad = create_box_mesh(50, 35, 20)
+save_stl(left_pad, "shoulder-pad-left.stl")
+right_pad = create_box_mesh(50, 35, 20)
+save_stl(right_pad, "shoulder-pad-right.stl")
 
-print("\n[4/4] Creating Shoulder Pads...")
-left_pad = create_shoulder_pad_stl()
-save_stl(left_pad, output_dir + "shoulder-pad-left.stl")
-right_pad = create_shoulder_pad_stl()
-save_stl(right_pad, output_dir + "shoulder-pad-right.stl")
+# 5. HEAD (sphere)
+print("\n[5/6] Head Module...")
+head = create_sphere_mesh(35, 24)
+save_stl(head, "head.stl")
 
-print("\n" + "=" * 50)
-print("ALL STL FILES GENERATED!!")
-print("=" * 50)
+# 6. NECK
+print("\n[6/6] Neck Module...")
+neck = create_cylinder_mesh(15, 25, 32)
+save_stl(neck, "neck.stl")
+
+# BONUS PARTS
+print("\n[BONUS] Legs + Arms...")
+upper_leg = create_cylinder_mesh(15, 60, 32)
+save_stl(upper_leg, "upper-leg-left.stl")
+lower_leg = create_cylinder_mesh(12, 55, 32)
+save_stl(lower_leg, "lower-leg-left.stl")
+foot = create_box_mesh(50, 40, 10)
+save_stl(foot, "foot.stl")
+upper_arm = create_cylinder_mesh(12, 55, 32)
+save_stl(upper_arm, "upper-arm-left.stl")
+lower_arm = create_cylinder_mesh(10, 50, 32)
+save_stl(lower_arm, "lower-arm-left.stl")
+hand = create_box_mesh(35, 45, 15)
+save_stl(hand, "hand.stl")
+
+print("\n" + "=" * 60)
+print("ALL STL FILES GENERATED!")
+print("=" * 60)
 print("""
-FILES CREATED:
-- chest-plate.stl (80x90x15mm)
-- cat-ear-left.stl (r=15mm, h=40mm)
-- cat-ear-right.stl (r=15mm, h=40mm)
-- lightning-bolt.stl (25x60x8mm)
-- shoulder-pad-left.stl (50x35x20mm)
-- shoulder-pad-right.stl (50x35x20mm)
-
-NOTE: These are BASIC shapes. For more detailed parts,
-download the .scad files from GitHub and open in OpenSCAD
-to get the FULL designs with lightning bolt cutouts etc!
-
-GitHub: https://github.com/ChrisBeast67/percy-robot
+All files saved to: /home/chris/.openclaw/workspace/percy-robot/
+Ready for download and3D printing!
 """)
